@@ -1,0 +1,248 @@
+---
+title: "EDA & Machine Learning on Iris Dataset"
+author: "Mohit"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(class)
+library("scatterplot3d")
+library("e1071")
+library(reshape2)
+library(gridExtra)
+library(sparcl)
+library(knitr)
+```
+
+```{r, include=FALSE}
+iris <- read.csv('/media/newhd/Data Science/DataSets/kaggle_datasets/iris-species/Iris.csv')
+```
+
+##Exploratory Data Analysis
+
+```{r,message=FALSE, warning=FALSE}
+dim(iris)  #Checking dimensions, iris data have 150 observations & 6 features 
+```
+
+###Checking count of each species
+```{r,message=FALSE, warning=FALSE}
+table(iris$Species) #Have equal number of each
+```
+
+###Checking iris datset summary
+```{r,message=FALSE, warning=FALSE}
+summary(iris) #Checking data summary, there are no missing values in data
+```
+
+###Checking Iris dataset structure
+
+```{r,message=FALSE, warning=FALSE}
+str(iris) #Iris data have 4 key flower features as numeric type corresponding to 3 Species: setosa,versicolor,virginica
+```
+
+###Checking for outliers
+```{r,message=FALSE, warning=FALSE}
+boxplot(iris$SepalLengthCm,iris$SepalWidthCm,iris$PetalLengthCm,iris$PetalWidthCm)
+```
+
+###Checking outliers in SepalWidth
+```{r,message=FALSE, warning=FALSE}
+ggplot(iris, aes(x=SepalWidthCm, y=Id, color=Species)) + geom_point() 
+```
+
+###Average length & width by species
+```{r,message=FALSE, warning=FALSE}
+temp_df <- iris %>% group_by(Species) %>% summarize(mean(SepalLengthCm),mean(SepalWidthCm),mean(PetalLengthCm),mean(PetalWidthCm))
+kable(temp_df,align = 'c',col.names = c('Species','Avg Sepal Length','Avg Sepal Width','Avg Petal Length','Avg Petal Width')) 
+```
+
+
+###Scatter plot between Sepel Length & Sepel Width:
+
+```{r,message=FALSE, warning=FALSE}
+#plot(iris$SepalLengthCm,iris$SepalWidthCm)
+ggplot(iris, aes(x=SepalLengthCm, y=SepalWidthCm, color=Species)) + geom_point() + labs(title="Scatterplot", x="Sepal Length", y="Sepal Width")
+```
+
+###Scatter plot between Petal Length & Petal Width:
+
+```{r,message=FALSE, warning=FALSE}
+ggplot(iris, aes(x=PetalLengthCm, y=PetalWidthCm, color=Species)) + geom_point() + labs(title="Scatterplot", x="Petal Length", y="Petal Width") 
+```
+
+###Plotting all numeric features
+```{r,message=FALSE, warning=FALSE}
+ggpairs(data=iris,columns=2:5,title="Iris Flower Features",colour='Species')
+```
+
+###Including Density in plots
+```{r,message=FALSE, warning=FALSE}
+ggpairs(data=iris,
+             columns=2:5, 
+             upper = list(continuous = "density"),
+             lower = list(combo = "facetdensity"),
+             colour = "Species")
+```
+
+```{r,message=FALSE, warning=FALSE}
+pairs(iris[,1:4], col=iris$Species) #Trying pairs to get distinct colours for each cluster
+```
+
+###3D visualisation with 4 features:
+```{r,message=FALSE, warning=FALSE}
+colors <- c("#BB0000", "#00FFFF", "#7FFF00")
+colors <- colors[as.numeric(iris$Species)]
+scatterplot3d(iris[,2:4], pch=20, color=colors,grid=TRUE, box=FALSE,angle =80,xlab="Sepal Length", ylab="Sepal Width", zlab="Petal Length")
+```
+
+###Sepal Dimensions Variation across dataset 
+```{r,message=FALSE, warning=FALSE}
+p1<-ggplot(iris, aes(x=Id, y=SepalWidthCm, color=Species)) + geom_point() + geom_smooth()
+p2<-ggplot(iris, aes(x=Id, y=SepalLengthCm, color=Species)) + geom_point() + geom_smooth()
+grid.arrange(p1, p2, nrow=2)
+```
+
+###Petal Dimensions Variation across dataset 
+```{r,message=FALSE, warning=FALSE}
+p3<-ggplot(iris, aes(x=Id, y=PetalWidthCm, color=Species)) + geom_point() + geom_smooth()
+p4<-ggplot(iris, aes(x=Id, y=PetalLengthCm, color=Species)) + geom_point() + geom_smooth()
+grid.arrange(p3, p4, nrow=2)
+```
+
+###Checking Pearson Coorelation heat map among numeric features:
+```{r, include=FALSE, message=FALSE, warning=FALSE}
+cormat <- round(cor(iris[,-c(1,6)]),2)
+get_upper_tri <- function(cormat){
+  cormat[lower.tri(cormat)]<- NA
+  return(cormat)
+}
+
+upper_tri <- get_upper_tri(cormat)
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+heatmap<-ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1))+
+  coord_fixed() + geom_text(aes(Var2, Var1, label = value), color = "black", size = 4)
+```
+```{r}
+heatmap #check rmd code for details
+```
+
+##Testing different machine learning algorithms on iris dataset 
+
+
+##1. Applying k-means clustering
+
+###Removing Id as its not required for analysis
+```{r,message=FALSE, warning=FALSE}
+iris<-iris[,-c(1)]
+```
+
+```{r,message=FALSE, warning=FALSE}
+iris_subset <-iris #Creating data subset for clustering
+clus1 <- kmeans(iris_subset[,-c(5)], centers = 3, iter.max = 50, nstart = 50)
+```
+
+```{r,message=FALSE, warning=FALSE}
+iris_subset <- cbind(iris_subset,clus1$cluster)
+```
+
+```{r}
+iris_subset$`clus1$cluster`<-as.factor(iris_subset$`clus1$cluster`)
+colnames(iris_subset)[5]<- "ClusterID"
+ggplot(iris_subset, aes(x=PetalLengthCm, y=PetalWidthCm, color=ClusterID)) + geom_point()
+```
+
+##2. Applying Decision Trees
+
+```{r,message=FALSE, warning=FALSE}
+iris_subset <-iris #Creating data subset for classification
+
+#Dividing data in train & test samples
+set.seed(123)
+split.indices <- sample(nrow(iris_subset), nrow(iris_subset)*0.8, replace = F)
+train <- iris_subset[split.indices, ]
+test <- iris_subset[-split.indices, ]
+```
+
+```{r,message=FALSE, warning=FALSE}
+tree.model <- rpart(Species ~ .,data = train,method = "class",parms = list(split = "information"))
+prp(tree.model)
+```
+
+###Making predictions on test set using decision tree model:
+```{r,message=FALSE, warning=FALSE}
+tree.predict <- predict(tree.model, test[,-c(5)], type = "class")
+confusionMatrix(test$Species, tree.predict)
+```
+
+##3. Applying Hierarchical Clustering
+```{r,message=FALSE, warning=FALSE}
+iris_subset <-iris #Creating data subset for clustering
+
+iris_dist <- dist(iris_subset[,-c(5)]) #calculating distance matrix for features
+iris_hclust1<- hclust(iris_dist, method="complete") 
+plot(iris_hclust1)
+```
+
+###Coloured marking of 3 main clustures 
+```{r}
+clus_cut<-cutree(iris_hclust1, 3)
+ColorDendrogram(iris_hclust1, y=clus_cut, labels = names(clus_cut), branchlength = 80)
+```
+
+###Getting 3 main clusters & plotting them:
+```{r,message=FALSE, warning=FALSE}
+clusterCut <- cutree(iris_hclust1, k=3)
+iris_subset <-cbind(iris,clusterCut)
+colnames(iris_subset)[6]<- "ClusterID"
+
+iris_subset$ClusterID<-as.factor(iris_subset$ClusterID)
+ggplot(iris_subset, aes(x=PetalLengthCm, y=PetalWidthCm, color=ClusterID)) + geom_point()
+```
+
+##4. Applying K Nearest Neighbour Algorithm
+```{r,message=FALSE, warning=FALSE}
+iris_knn_pred <- knn(train = train[,-c(5)], test[,-c(5)], cl= train$Species,k = 3,prob=TRUE) 
+confusionMatrix(test$Species, iris_knn_pred)
+```
+
+##5. Applying Naive Bayes Algorithm
+```{r,message=FALSE, warning=FALSE}
+iris_nb = train(iris[,-c(5)],iris$Species,'nb',trControl=trainControl(method='cv',number=10))
+iris_nb
+```
+
+```{r,message=FALSE, warning=FALSE}
+table(predict(iris_nb$finalModel,test[,-c(6)])$class,test$Species)
+```
+
+##6. Applying Support Vector Machine Algorithm
+```{r,message=FALSE, warning=FALSE}
+svm_model <- svm(Species ~ ., data=train)
+summary(svm_model)
+```
+
+###Making predictions on test data:
+```{r,message=FALSE, warning=FALSE}
+svm_pred <- predict(svm_model,test[,-c(5)])
+table(svm_pred,test[,c(5)])
+```
+
+*Thanks for reviewing my work, I am a novice in data analysis & still learning, so please provide your valuable feedback on errors & improvements*

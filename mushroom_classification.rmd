@@ -1,0 +1,92 @@
+---
+title: "Mushroom Classification"
+author: "Mohit"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(e1071)
+library(caret)
+library(cowplot)
+mushroom<-read.csv("mushrooms.csv")
+```
+
+```{r, include=FALSE}
+str(mushroom)
+summary(mushroom)
+```
+
+###Visualisations
+
+```{r, echo=FALSE}
+bar_theme1<- theme(axis.text.x = element_text(hjust = 1, vjust = 0.5), 
+                   legend.position="none")
+
+plot_grid(ggplot(mushroom, aes(x=cap.shape,fill=class))+ geom_bar(), 
+          ggplot(mushroom, aes(x=cap.surface,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=cap.color,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=bruises,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=odor,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=habitat,fill=class))+ geom_bar()+bar_theme1,
+          align = "h")   
+```
+
+```{r, echo=FALSE}
+plot_grid(ggplot(mushroom, aes(x=gill.attachment,fill=class))+ geom_bar(), 
+          ggplot(mushroom, aes(x=gill.attachment,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=gill.attachment,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=gill.attachment,fill=class))+ geom_bar()+bar_theme1,
+          align = "h")  
+```
+
+```{r, echo=FALSE}
+plot_grid(ggplot(mushroom, aes(x=stalk.shape,fill=class))+ geom_bar(), 
+          ggplot(mushroom, aes(x=stalk.root,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=stalk.surface.above.ring,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=stalk.surface.below.ring,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=stalk.color.above.ring,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=stalk.color.below.ring,fill=class))+ geom_bar()+bar_theme1,
+          align = "h")   
+```
+
+```{r, echo=FALSE}
+plot_grid(ggplot(mushroom, aes(x=veil.type,fill=class))+ geom_bar(), 
+          ggplot(mushroom, aes(x=veil.color ,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=ring.number,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=ring.type,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=spore.print.color,fill=class))+ geom_bar()+bar_theme1,
+          ggplot(mushroom, aes(x=population,fill=class))+ geom_bar()+bar_theme1,
+          align = "h")   
+```
+
+
+###Creating Train Test Splits
+
+```{r}
+set.seed(2)
+s=sample(1:nrow(mushroom),0.7*nrow(mushroom))
+mush_train=mushroom[s,]
+mush_test=mushroom[-s,]
+mush_test1<- mush_test[, -1]
+```
+
+###Creating Model using Naive Bayes Classifier
+
+```{r}
+model <- naiveBayes(class ~. , data = mush_train)
+```
+
+###Predicting Mushroom Class on Testset 
+
+```{r}
+pred <- predict(model, mush_test1)
+```
+
+###Model Evaluation
+
+```{r}
+confusionMatrix(pred,mush_test$class)
+```

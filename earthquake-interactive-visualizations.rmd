@@ -1,0 +1,78 @@
+---
+title: "Earthquakes Visualisations Using Leaflet"
+author: "Mohit"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(leaflet)
+shake<-read.csv("earthquakes.csv")
+```
+
+Interactive Clusters of Earthquake Prone Zones
+
+```{r cars}
+shake %>%
+  leaflet() %>%
+  addTiles() %>%
+  addMarkers(~Longitude,~Latitude,clusterOptions =  markerClusterOptions(maxClusterRadius=40))
+```
+
+Marking Exact Locations of Earthquakes
+```{r pressure, echo=FALSE}
+shake %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircles(~Longitude,~Latitude,radius = 10,color = "blue")
+```
+
+Earthquakes Clustered by Magnitude
+```{r}
+shake %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircles(~Longitude, ~Latitude,radius = ~ifelse(Magnitude < 6, 5,ifelse(Magnitude < 7, 10,ifelse(Magnitude < 8, 20, 30))),
+             color = ~ifelse(Magnitude < 6, "green", ifelse(Magnitude < 7,"yellow",ifelse(Magnitude < 8,"blue","red"))))
+```
+
+Earthquakes of Class Great(Magnitude>=8)
+```{r}
+super_shake<-subset(shake,shake$Magnitude>=8)
+super_shake$label <- paste('Earthquake Date: ',super_shake$Date)
+
+super_shake %>%
+  leaflet() %>%
+  addTiles() %>%
+  addAwesomeMarkers(~Longitude, ~Latitude,label=~as.character(label))
+```
+
+Earthquakes Frequency by Year(Top 10)
+```{r}
+shake$Date<-as.Date(shake$Date, format = "%m/%d/%Y")
+shake$Year<-format(as.Date(shake$Date, format="%d/%m/%Y"),"%Y")
+
+temp <- shake %>% group_by(Year) %>% summarise(n=n()) %>% arrange(desc(n)) %>% head(10)
+temp %>%    
+  ggplot(aes(x =reorder(Year,n), y =  n )) +
+  geom_bar(stat='identity',colour="white", fill = c("blue")) +
+  labs(x = 'Year', y = 'Count', title = 'Top 10 Years with Highest Earthquake Frequency') +
+  coord_flip() + 
+  theme_bw()
+```
+
+Visualising Earthquakes in Most Active Year(2011)
+```{r}
+shakes_2011<-subset(shake,shake$Year==2011)
+
+shakes_2011 %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircles(~Longitude,~Latitude,radius = 10,color = "blue")
+```
+

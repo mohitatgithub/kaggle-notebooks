@@ -116,26 +116,3 @@ df_list[1] %>%
   addTiles() %>%
   addCircles(lng=BAYVIEW.X,lat=BAYVIEW.Y,radius = 20,color = "red")
 
-#Classification Trees
-library(rpart)
-library(rpart.plot)
-library(caret)
-library(caTools)
-
-set.seed(100)
-indices = sample.split(crime$Category, SplitRatio = 0.1)
-crime_sample = crime[indices,]
-table(crime_sample$Category)
-#test = telecom_final[!(indices),]
-
-#Building tree model- default hyperparameters
-tree.model <- rpart(Category ~ ., data = crime_sample, method = "class")
-
-#Display decision tree
-prp(tree.model)
-
-#Make predictions on the test set
-tree.predict <- predict(tree.model, test, type = "class")
-
-#Evaluate the results
-confusionMatrix(test$income, tree.predict, positive = ">50K")  # 0.8076

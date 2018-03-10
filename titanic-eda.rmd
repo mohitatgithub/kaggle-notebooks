@@ -1,0 +1,366 @@
+---
+title: "Titanic Tragedy: Exploratory Data Analysis"
+output: 
+  html_document:
+    code_folding: hide
+---
+<br>
+<center><img src="titanic.jpg"></center>
+<br>
+
+
+#### <u>Data description</u>
+The sinking of the RMS Titanic is one of the most infamous shipwrecks in history. On April 15, 1912, during her maiden voyage, the Titanic sank after colliding with an iceberg, killing 1502 out of 2224 passengers and crew.
+
+In this Notebook I will do basic Exploratory Data Analysis on Titanic dataset using R & ggplot & attempt to answer few questions about Titanic Tragedy based on dataset. Dataset was obtained from kaggle (https://www.kaggle.com/c/titanic/data).
+
+<br>
+
+#### <u>Data Dictionary</u>
+Variable  | Definition  	      | Key
+----------|-------------------- |------------------------------------------------
+survival	| Survival	          | 0 = No, 1 = Yes
+          |                     | 
+pclass	  | Ticket class	      | 1 = 1st, 2 = 2nd, 3 = 3rd
+          |                     |
+embarked	| Port of Embarkation | C = Cherbourg, Q = Queenstown, S = Southampton
+          |                     |
+sex	      | Sex	                |
+          |                     |
+Age	      | Age in years	
+          |                     |
+sibsp	    | # of siblings / spouses aboard the Titanic	
+          |
+parch	    | # of parents / children aboard the Titanic	
+          |
+ticket	  | Ticket number	
+          |
+fare	    | Passenger fare	
+          |
+cabin	    | Cabin number	
+
+<br>
+
+#### Fetching data
+_Toggle Code button to see steps_
+```{r, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+
+titanic_train<-read.csv('train.csv')
+titanic_test<-read.csv('test.csv')
+```
+
+<br>
+
+#### Merging train & test sets for complete Exploratory Analysis
+```{r}
+titanic_test$Survived <- NA
+titanic <- rbind(titanic_train, titanic_test)
+```
+_Thuogh we can use merged datset for EDA but I will use train datset only for EDA for consistency & simplicity as Survival attribute is missing from test data._
+
+<br>
+
+#### <u>Dataset Preview</u>
+_These are first few records from titanic dataset._
+```{r}
+head(titanic) %>% kable("html") %>%
+  kable_styling()
+```
+
+
+#### <u>Data Structure & Summary</u>
+```{r}
+str(titanic) #1309 obervations & 12 variables
+```
+
+<br>
+```{r}
+summary(titanic) #Survived, Age & Fare have NA values
+```
+
+<br>
+
+#### <u>Checking Outliers</u>
+```{r}
+outlierKD <- function(dt, var) {
+  var_name <- eval(substitute(var),eval(dt))
+  na1 <- sum(is.na(var_name))
+  m1 <- mean(var_name, na.rm = T)
+  par(mfrow=c(2, 2), oma=c(0,0,3,0))
+  boxplot(var_name, main="With outliers")
+  hist(var_name, main="With outliers", xlab=NA, ylab=NA)
+  outlier <- boxplot.stats(var_name)$out
+  mo <- mean(outlier)
+  var_name <- ifelse(var_name %in% outlier, NA, var_name)
+  boxplot(var_name, main="Without outliers")
+  hist(var_name, main="Without outliers", xlab=NA, ylab=NA)
+  title("Outlier Check", outer=TRUE)
+  na2 <- sum(is.na(var_name))
+  cat("Outliers identified:", na2 - na1, "n")
+  cat("Propotion (%) of outliers:", round((na2 - na1) / sum(!is.na(var_name))*100, 1), "n")
+  cat("Mean of the outliers:", round(mo, 2), "n")
+  m2 <- mean(var_name, na.rm = T)
+  cat("Mean without removing outliers:", round(m1, 2), "n")
+  cat("Mean if we remove outliers:", round(m2, 2), "n")
+}
+```
+<center><u>**Fare**</u></center>
+```{r}
+outlierKD(titanic_train,Fare)
+```
+<br>
+
+<center><u>**SibSp**</u><center>
+```{r}
+outlierKD(titanic_train,SibSp)
+```
+<br>
+
+<center><u>**Parch**</u><center>
+```{r}
+outlierKD(titanic_train,Parch)
+```
+
+<br>
+
+#### <u>Checking Missing Values</u>
+```{r}
+checkNA <- function(x){sum(is.na(x))/length(x)*100} 
+sapply(titanic,checkNA)
+```
+_Survived: 31.9% NA, Age:20.1% NA, Fare:.07% NA values._
+
+_Though NA values in Survived here only represent test data set so ignore Survived._
+```{r}
+sapply(titanic_train,checkNA)
+```
+
+<br>
+
+#### Checking Missing values which are not NA
+```{r}
+checkMissing <- function(x){sum(x=="")/length(x)*100}
+sapply(titanic,checkMissing)
+```
+_Cabin: 77.46%, Embarked: .15% values are empty_
+
+<br>
+
+#### <u>Missing Value Treatment</u>
+_Toggle Code button to see code_
+```{r, echo=TRUE}
+#1. Age: Replacing NA values in Age with mean 
+#titanic[is.na(titanic$Age),6] <- mean(titanic$Age)
+titanic$Age[is.na(titanic$Age)] <- round(mean(titanic$Age, na.rm = TRUE))
+titanic_train$Age[is.na(titanic_train$Age)] <- round(mean(titanic_train$Age, na.rm = TRUE))
+
+#2. Embarked: Replacing Empty Embarked with most common value 'S'
+titanic_train$Embarked <- replace(titanic_train$Embarked, which(titanic_train$Embarked==""), 'S')
+
+#3. Cabin: Not replacing with anything as Cabin values are unique
+```
+
+<br>
+
+#### <u>Feature Engineering</u>
+_Dataset contains some attrbutes like Name, Age, SibSp & Parch which can be used effectively if we can extract useful information from these using regular expressions & binning._
+
+#### 1. Extracting Title from Name
+```{r}
+Title <-  gsub("^.*, (.*?)\\..*$", "\\1", titanic_train$Name)
+titanic_train$Title <- as.factor(Title)
+table(Title)
+```
+
+#### 2. Extracting Family Size from SibSp & Parch
+```{r}
+titanic_train$FamilyCount <-titanic_train$SibSp + titanic_train$Parch + 1 
+titanic_train$FamilySize[titanic_train$FamilyCount == 1] <- 'Single' 
+titanic_train$FamilySize[titanic_train$FamilyCount < 5 & titanic_train$FamilyCount >= 2] <- 'Small' 
+titanic_train$FamilySize[titanic_train$FamilyCount >= 5] <- 'Big' 
+titanic_train$FamilySize=as.factor(titanic_train$FamilySize)
+table(titanic_train$FamilySize)
+```
+
+<br>
+
+#### <u>Data Preprocessing</u>
+_Most variables in dataset are categorical, here I will update thier names as per data dictionary & data types as factor for simplicity & readability. Toggle Code button to see steps._
+```{r}
+# 1.Changing names of few categorical variables for interpretability 
+titanic_train$Survived <- ifelse(titanic_train$Survived==1,"Yes","No")
+titanic_train$Survived <- as.factor(titanic_train$Survived)
+
+titanic_train$Embarked <- ifelse(titanic_train$Embarked=="S","Southampton", 
+                              ifelse(titanic_train$Embarked=="C","Cherbourg", "Queenstown"))
+titanic_train$Embarked <- as.factor(titanic_train$Embarked)
+
+# 2.Converting categorical variables from int to factor
+# i) Pclass
+titanic_train$Pclass <- as.factor(titanic_train$Pclass)
+
+# ii) SibSp
+titanic_train$SibSp <- as.factor(titanic_train$SibSp)
+
+# iii) Parch
+titanic_train$Parch <- as.factor(titanic_train$Parch)
+
+```
+<br>
+
+#### <u>Asking questions on Titanic tragedy</u>
+_Lets try to draw few insights from data using Univariate & Bivariate Analysis_
+
+**Note: For queries related to passenger survival I will use train dataset as 'Survived' attribute is not available in test & has to be predicted using created model. So these observations will not be accurate as we don't have complete data of passengers to analyse here.**
+
+<br>
+
+#### 1. What percentage of passengers survived?
+```{r, results=FALSE}
+temp<-subset(titanic_train,titanic_train$Survived=="Yes")
+(nrow(temp)/nrow(titanic_train))*100
+```
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(titanic_train,aes(x=as.factor(Survived))) + geom_histogram(stat="count") + geom_text(stat='count',aes(label=..count..),vjust=-.2) + ylab("Number of Passengers") + xlab("Survived")
+```
+_38.3% passengers survived_
+
+<br>
+
+#### 2. What was the average age of passengers?
+_Seems that most passengers had Age between 25-35._
+```{r}
+summary(titanic$Age)
+d <- density(titanic$Age)
+plot(d,main="Passenger Age Distribution",xlab="Age",ylab="Frequency",col="blue")
+```
+
+<br>
+
+#### 3. What was proportion of survivors by gender?
+_As we know that women & children were saved first a large proportion of women survived compared to men._
+```{r}
+ggplot(titanic_train, aes(x=Sex,fill=Survived))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers")
+```
+
+Sex   | Survived| Died | Percentage Survived
+------|---------|------|-----------------------
+Male  | 109     | 468  | 18.9%
+Female| 233     |  81  | 74.2%
+
+<br>
+
+#### 4. What was the Age distribution of Survivors & Non-Survivors?
+_Blue line of Survivors crosses Red line of Non-Survivors for children & elders who were saved first._
+```{r}
+ggplot(titanic_train) + geom_freqpoly(mapping = aes(x = Age, color = Survived), binwidth = 2.5) +
+ylab("Frequency")
+```
+
+<br>
+
+#### 5. What was the distribution of Passenger Fare for Survivors & Non-Survivors?
+_Blue line crosses red line as Fare increases which might be linked to Passenger Class. Lets explore this further in next question._
+```{r}
+ggplot(titanic_train) + geom_freqpoly(mapping = aes(x = Fare, color = Survived), binwidth = 10)
+```
+
+<br>
+
+#### 6. What was the Passenger Class of most Non-Survivors? 
+_Most passengers from third class died, may be they didn't get the fair chance. you can read more about this in this [article](http://www.independent.co.uk/voices/did-the-third-class-passengers-on-the-titanic-have-a-fair-chance-1155678.html)_
+```{r}
+ggplot(titanic_train, aes(x=Pclass,fill=Survived))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers") + xlab("Passenger Class")
+```
+
+Passenger Class   | Survived| Died | Percentage Survived
+------------------|---------|------|-----------------------
+Third             | 119     | 372  | 24.2%
+Second            |  87     |  97  | 47.2%
+First             | 136     |  80  | 62.9%
+
+<br>
+
+#### 7. What was proportion of survivors by place of Embarkment?
+_A large proportion of passengers boarded from Southampton(72.4%) followed by Cherbourg(18.9%) & Queenstown(8.6%). Titanic started her maiden voyage from Southhampton, you can read more about whole route [here](http://www.titanicfacts.net/titanic-maiden-voyage.html)_
+```{r}
+ggplot(titanic_train, aes(x=Embarked,fill=Survived))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers")
+```
+
+Embarked at   | Survived| Died | Percentage Survived
+--------------|---------|------|-----------------------
+Southampton   | 219     | 427  | 33.9%
+Queenstown    |  30     |  47  | 38.9%
+Cherbourg     |  93     |  75  | 55.3%
+
+<br>
+
+#### 8. Were number of sibling/spouses aboard Titanic & Passenger Class related?
+_Mostly Class 3 Passengers had more then 3 siblings or large families compared to Class 1 & 2._
+```{r}
+ggplot(titanic_train, aes(x=SibSp,fill=Pclass))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers") + xlab("Number of Siblings")
+```
+
+<br>
+
+#### 9. Was number of sibling/spouses aboard Titanic related to Survival?
+```{r}
+ggplot(titanic_train, aes(x=SibSp,fill=Survived))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers")+xlab("Number of Siblings/Spouse")
+```
+<br>
+
+#### 10. Does Number of parents/children aboard Titanic differ with Passenger Class?
+_Like SibSp Class 3 Passengers had more then 3 childrens or large families compared to Class 1 & 2._
+```{r}
+ggplot(titanic_train, aes(x=Parch,fill=Pclass))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers") + xlab("Number of Parents/Children")
+```
+<br>
+
+#### 11. Was number of Parents/Children aboard Titanic related to Survival?
+_Although Passengers with 0 Parents/Children have smallest survival ratio this could be entirely based on probability as we have seen same pattern with SibSp, so can't say much from this plot._
+```{r}
+ggplot(titanic_train, aes(x=Parch,fill=Survived))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers") + xlab("Number of Parents/Children")
+```
+
+<br>
+
+#### 12. Was there any relation between Passenger Name Title & Survival?
+_As we already saw the male/female survival ratio earlier, a similar pattern exist here as male titles like 'Mr' have lower survival percentage compared to female title like 'Miss' & 'Mrs'._
+```{r}
+ggplot(titanic_train, aes(x=Title,fill=Survived))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers") + xlab("Passenger Name Title") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+<br>
+
+####13. Was there any relation between Family Size & Survival?
+```{r}
+ggplot(titanic_train, aes(x=FamilySize,fill=Survived))+ geom_bar(position = "dodge") + geom_text(stat='count',aes(label=..count..),position = position_dodge(0.9),vjust=-0.2) +
+ylab("Number of Passengers") + xlab("Family Size")
+```
+
+Passenger Class   | Survived| Died | Percentage Survived
+------------------|---------|------|-----------------------
+Big               |  10     |  52  | 16.1%
+Small             | 169     | 123  | 57.8%
+Single            | 163     | 374  | 30.3%
+
+<br>
+
+_We can explore many more relationships among given variables & drive new features based on maybe Cabin, Tickets etc. There are many questions which can be asked. More relevant interpretations can be drawn from complete dataset of passengers._
+
+_Thanks for reading this notebook._
+
+<br>

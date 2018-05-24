@@ -1,0 +1,129 @@
+---
+title: "Identifying Apparel from Fashion MNIST dataset"
+output: html_document
+---
+
+Here I will be developing a model for prediction of apparel in modified version on MNIST dataset from kaggle called fashion MNIST. dataset contain 28x28 images of 10 apparel items, given dataset format is exqactly similar to original MNIST so I have used same approach from my earlier notebook on MNIST here. I will build first model using Support Vector Machine(SVM) followed by an improved approach using Principal Component Analysis(PCA).
+
+```{r,include=FALSE}
+library(kernlab)
+library(readr)
+library(caret)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(caTools)
+library(knitr)
+library(e1071)
+```
+
+### Fetching Data
+```{r}
+#Loading train & test data, the datasets were obtained from kaggle: https://www.kaggle.com/zalando-research/fashionmnist/data
+fashion_mnist <- read.csv("fashion-mnist_train.csv")
+fashion_mnist_test <- read.csv("fashion-mnist_test.csv")
+```
+
+### Checking dataset dimensions
+```{r}
+dim(fashion_mnist)
+#train dataset have 60000 images & 785 columns(784 representing 28x28 pixels image, 1 representing image class)
+```
+```{r}
+dim(fashion_mnist_test)
+#train dataset have 10000 images & 785 columns, label is provided for test as well
+```
+
+### Lets check distribution percentage of each item in train dataset
+```{r}
+table(mnist$label)/nrow(mnist) *100
+#Have uniform distribution of each item
+```
+
+### Visualising items in data
+```{r}
+digit <- matrix(as.numeric(mnist[10,-1]), nrow = 28)
+image(digit, col = grey.colors(255))
+#This is how a typical item looks in our dataset, image is flipped, this looks like a purse
+```
+
+### Some more images of same item to show the variations in pictures 
+
+```{r}
+mnist_copy<-fashion_mnist
+
+mnist_copy_7 <- mnist_copy[mnist_copy$label == 7, ] #here 7 corresponds to item shoe
+flip <- function(matrix){
+  apply(matrix, 2, rev)
+}
+#Shows 9 diffrent pictures of a shoe
+par(mfrow=c(3,3))
+for (i in 10:18){
+  digit <- flip(matrix(rev(as.numeric(mnist_copy_7[i,-c(1, 786)])), nrow = 28)) 
+  image(digit, col = grey.colors(255))
+}
+```
+
+### Preparing to build the model
+```{r}
+#Lets first convert our class label to factor or categorical type
+fashion_mnist$label <-factor(fashion_mnist$label)
+```
+
+### Building a model for predicting item in image using SVM
+```{r}
+#I have skipped hyperparameter tunning here as its compute intensive 
+Model_RBF <- ksvm(label~., data = fashion_mnist, scale = FALSE, kernel = "rbfdot")
+Eval_RBF<- predict(Model_RBF, fashion_mnist_test)
+#confusion matrix - RBF Kernel
+confusionMatrix(Eval_RBF,fashion_mnist_test$label)
+```
+
+### Lets try PCA now
+```{r}
+#Reducing features using PCA
+mnist_norm<-as.matrix(fashion_mnist[,-1])/255
+mnist_norm_cov <- cov(mnist_norm)
+pca <- prcomp(mnist_norm_cov)
+trainlabel <- fashion_mnist[,1]
+```
+
+```{r}
+#Checking relationship between number of Pricipal Components & Variance
+vexplained <- as.data.frame(pca$sdev^2/sum(pca$sdev^2))
+vexplained <- cbind(c(1:784),vexplained,cumsum(vexplained[,1]))
+colnames(vexplained) <- c("No_of_Principal_Components","Individual_Variance_Explained","Cumulative_Variance_Explained")
+
+#Plot between Cumulative Variance & Principal Components
+plot(vexplained$No_of_Principal_Components,vexplained$Cumulative_Variance_Explained, xlim = c(0,150),type='b',pch=16,xlab = "Principal Componets",ylab = "Cumulative Variance Explained",main = 'Principal Components vs Cumulative Variance Explained')
+```
+
+#### Table showing Cumulative Variance & Principal Components
+```{r}
+vexplainedsummary <- vexplained[seq(0,150,5),]
+kable(vexplainedsummary)
+#Note: Variance till Number of Principal Components 25 is 0.9971966
+```
+
+#### Applying SVM on training set and calculating accuracy using top 25 principal components
+```{r}
+mnist_final <- as.matrix(fashion_mnist[,-1]) %*% pca$x[,1:25]
+trainlabel <- as.factor(trainlabel)
+svm.model.final <- svm(mnist_final,trainlabel,cost = 2)
+predictionfinaltrain <- predict(svm.model.final,mnist_final)
+correcttrainfinal <- predictionfinaltrain==trainlabel
+Accuracytrainfinal <- (sum(correcttrainfinal)/nrow(mnist_final))*100
+Accuracytrainfinal #91.23 %
+```
+
+#### Predicting mnist test data labels using above model
+```{r}
+mnist_test_pca<-as.matrix(fashion_mnist_test[,-1]) %*% pca$x[,1:25]
+mnist_predictions<-predict(svm.model.final,mnist_test_pca)
+mnist_test$predicted_labels<-mnist_predictions
+confusionMatrix(mnist_test$predicted_labels,fashion_mnist_test$label)
+```
+
+Getting a decent accuracy of 88.94% using this model on test dataset
+
+
